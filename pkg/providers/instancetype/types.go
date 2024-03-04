@@ -483,7 +483,7 @@ func ENILimitedPods(ctx context.Context, info ec2types.InstanceTypeInfo, reserve
 		return resource.NewQuantity(0, resource.DecimalSI)
 	}
 	addressesPerInterface := *info.NetworkInfo.Ipv4AddressesPerInterface
-	return resources.Quantity(fmt.Sprint(usableNetworkInterfaces*(int64(addressesPerInterface)-1) + 2))
+	return resources.Quantity(fmt.Sprint(usableNetworkInterfaces*(int64(addressesPerInterface)-1) + int64(options.FromContext(ctx).MaxPodsExtraCapacity)))
 }
 
 func privateIPv4Address(instanceTypeName string) *resource.Quantity {
