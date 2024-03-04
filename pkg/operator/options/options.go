@@ -44,6 +44,7 @@ type Options struct {
 	ReservedENIs            int
 	DisableDryRun           bool
 	EnableZonalShift        bool
+	MaxPodsExtraCapacity    int
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
@@ -57,6 +58,7 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.IntVar(&o.ReservedENIs, "reserved-enis", env.WithDefaultInt("RESERVED_ENIS", 0), "Reserved ENIs are not included in the calculations for max-pods or kube-reserved. This is most often used in the VPC CNI custom networking setup https://docs.aws.amazon.com/eks/latest/userguide/cni-custom-network.html.")
 	fs.BoolVarWithEnv(&o.DisableDryRun, "disable-dry-run", "DISABLE_DRY_RUN", false, "If true, then disable dry run validation for EC2NodeClasses.")
 	fs.BoolVarWithEnv(&o.EnableZonalShift, "enable-zonal-shift", "ENABLE_ZONAL_SHIFT", false, "If true, then enable zonal shifting feature.")
+	fs.IntVar(&o.MaxPodsExtraCapacity, "max-pods-extra-capacity", env.WithDefaultInt("MAX_PODS_EXTRA_CAPACITY", 2), "Extra pod capacity allocatable on nodes due to host networked pods that do not consume ENIs. The default is for aws-cni and kube-proxy pods, which are not included in the calculations for max-pods or kube-reserved.")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {
