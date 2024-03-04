@@ -59,6 +59,7 @@ type Options struct {
 	SubnetRefreshInterval        time.Duration
 	SecurityGroupRefreshInterval time.Duration
 	FeatureGates                 FeatureGates
+	MaxPodsExtraCapacity         int
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
@@ -76,6 +77,7 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.DurationVar(&o.SubnetRefreshInterval, "subnet-refresh-interval", env.WithDefaultDuration("SUBNET_REFRESH_INTERVAL", time.Minute), "How often Karpenter refreshes subnet data from EC2. Increasing this value will reduce the number of DescribeSubnets API calls at the cost of increased staleness in subnet discovery. Must be at least 1m.")
 	fs.DurationVar(&o.SecurityGroupRefreshInterval, "security-group-refresh-interval", env.WithDefaultDuration("SECURITY_GROUP_REFRESH_INTERVAL", time.Minute), "How often Karpenter refreshes security group data from EC2. Increasing this value will reduce the number of DescribeSecurityGroups API calls at the cost of increased staleness in security group discovery. Must be at least 1m.")
 	fs.StringVar(&o.FeatureGates.inputStr, "aws-feature-gates", env.WithDefaultString("AWS_FEATURE_GATES", "NodeClassCEL=false,DRANVIDIAGPU=false,DRAEFA=false,RebootForRepair=false"), "Optional AWS-specific features can be enabled / disabled using feature gates. Current options are: NodeClassCEL, DRANVIDIAGPU, DRAEFA, RebootForRepair.")
+	fs.IntVar(&o.MaxPodsExtraCapacity, "max-pods-extra-capacity", env.WithDefaultInt("MAX_PODS_EXTRA_CAPACITY", 2), "Extra pod capacity allocatable on nodes due to host networked pods that do not consume ENIs. The default is for aws-cni and kube-proxy pods, which are not included in the calculations for max-pods or kube-reserved.")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {

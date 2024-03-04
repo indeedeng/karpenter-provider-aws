@@ -45,6 +45,7 @@ type OptionsFields struct {
 	SecurityGroupRefreshInterval *time.Duration
 	EnableZonalShift             *bool
 	FeatureGates                 FeatureGates
+	MaxPodsExtraCapacity         *int
 }
 
 func Options(overrides ...OptionsFields) *options.Options {
@@ -73,5 +74,6 @@ func Options(overrides ...OptionsFields) *options.Options {
 			DRANVIDIAGPU: lo.FromPtrOr(opts.FeatureGates.DRANVIDIAGPU, false),
 			DRAEFA:       lo.FromPtrOr(opts.FeatureGates.DRAEFA, false),
 		},
+		MaxPodsExtraCapacity: lo.FromPtrOr(opts.MaxPodsExtraCapacity, 2),
 	}
 }

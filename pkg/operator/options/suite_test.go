@@ -67,7 +67,8 @@ var _ = Describe("Options", func() {
 			"--disable-dry-run",
 			"--ami-refresh-interval", "15m",
 			"--subnet-refresh-interval", "15m",
-			"--security-group-refresh-interval", "15m")
+			"--security-group-refresh-interval", "15m",
+			"--max-pods-extra-capacity", "1")
 		Expect(err).ToNot(HaveOccurred())
 		expectOptionsEqual(opts, test.Options(test.OptionsFields{
 			ClusterCABundle:              lo.ToPtr("env-bundle"),
@@ -81,6 +82,7 @@ var _ = Describe("Options", func() {
 			AMIRefreshInterval:           lo.ToPtr(15 * time.Minute),
 			SubnetRefreshInterval:        lo.ToPtr(15 * time.Minute),
 			SecurityGroupRefreshInterval: lo.ToPtr(15 * time.Minute),
+			MaxPodsExtraCapacity:         lo.ToPtr(1),
 		}))
 	})
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
@@ -95,6 +97,7 @@ var _ = Describe("Options", func() {
 		os.Setenv("AMI_REFRESH_INTERVAL", "30m")
 		os.Setenv("SUBNET_REFRESH_INTERVAL", "15m")
 		os.Setenv("SECURITY_GROUP_REFRESH_INTERVAL", "15m")
+		os.Setenv("MAX_PODS_EXTRA_CAPACITY", "1")
 
 		// Add flags after we set the environment variables so that the parsing logic correctly refers
 		// to the new environment variable values
@@ -113,6 +116,7 @@ var _ = Describe("Options", func() {
 			AMIRefreshInterval:           lo.ToPtr(30 * time.Minute),
 			SubnetRefreshInterval:        lo.ToPtr(15 * time.Minute),
 			SecurityGroupRefreshInterval: lo.ToPtr(15 * time.Minute),
+			MaxPodsExtraCapacity:         lo.ToPtr(1),
 		}))
 	})
 
@@ -231,6 +235,10 @@ var _ = Describe("Options", func() {
 			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--security-group-refresh-interval", "30s")
 			Expect(err).To(HaveOccurred())
 		})
+		It("should fail when maxPodsExtraCapacity is negative", func() {
+			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--max-pods-extra-capacity", "-1")
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })
 
@@ -248,4 +256,5 @@ func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
 	Expect(optsA.SubnetRefreshInterval).To(Equal(optsB.SubnetRefreshInterval))
 	Expect(optsA.SecurityGroupRefreshInterval).To(Equal(optsB.SecurityGroupRefreshInterval))
 	Expect(optsA.FeatureGates.NodeClassCEL).To(Equal(optsB.FeatureGates.NodeClassCEL))
+	Expect(optsA.MaxPodsExtraCapacity).To(Equal(optsB.MaxPodsExtraCapacity))
 }
