@@ -16,6 +16,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -43,6 +44,11 @@ type Options struct {
 
 func (o Options) kubeletExtraArgs() (args []string) {
 	args = append(args, o.nodeLabelArg(), o.nodeTaintArg())
+
+	// al2: --maximum-dead-containers is deprecated with no replacement, so we can only set it via cli flags, not config
+	if maxDeadContainers := os.Getenv("INDEED_MAX_DEAD_CONTAINERS"); maxDeadContainers != "" {
+		args = append(args, fmt.Sprintf("--maximum-dead-containers=%s", maxDeadContainers))
+	}
 
 	if o.KubeletConfig == nil {
 		return lo.Compact(args)
@@ -72,6 +78,7 @@ func (o Options) kubeletExtraArgs() (args []string) {
 	if o.KubeletConfig.CPUCFSQuota != nil {
 		args = append(args, fmt.Sprintf("--cpu-cfs-quota=%t", lo.FromPtr(o.KubeletConfig.CPUCFSQuota)))
 	}
+
 	return lo.Compact(args)
 }
 

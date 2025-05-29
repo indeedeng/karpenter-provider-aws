@@ -17,6 +17,7 @@ package bootstrap
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 
 	admapi "github.com/awslabs/amazon-eks-ami/nodeadm/api"
@@ -93,6 +94,10 @@ func (n Nodeadm) getNodeConfigYAML() (string, error) {
 	config.Spec.Kubelet.Config = inlineConfig
 	if arg := n.nodeLabelArg(); arg != "" {
 		config.Spec.Kubelet.Flags = []string{arg}
+	}
+	// al2023: --maximum-dead-containers is deprecated with no replacement, so we can only set it via cli flags, not config
+	if maxDeadContainers := os.Getenv("INDEED_MAX_DEAD_CONTAINERS"); maxDeadContainers != "" {
+		config.Spec.Kubelet.Flags = append(config.Spec.Kubelet.Flags, fmt.Sprintf("--maximum-dead-containers=%s", maxDeadContainers))
 	}
 
 	// Convert to YAML at the end for improved legibility.
