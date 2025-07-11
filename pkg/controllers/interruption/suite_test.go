@@ -120,6 +120,8 @@ var _ = AfterEach(func() {
 var _ = Describe("InterruptionHandling", func() {
 	var node *corev1.Node
 	var nodeClaim *karpv1.NodeClaim
+	var pod1 *corev1.Pod
+	var pod2 *corev1.Pod
 	BeforeEach(func() {
 		nodeClaim, node = coretest.NodeClaimAndNode(karpv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
@@ -132,6 +134,21 @@ var _ = Describe("InterruptionHandling", func() {
 			},
 		})
 		metrics.NodeClaimsDisruptedTotal.Reset()
+		pod1 = coretest.Pod(coretest.PodOptions{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod-1",
+				Namespace: "default",
+			},
+		})
+		pod2 = coretest.Pod(coretest.PodOptions{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod-2",
+				Namespace: "default",
+			},
+		})
+		// Bind pods to the node
+		pod1.Spec.NodeName = node.Name
+		pod2.Spec.NodeName = node.Name
 	})
 	Context("Processing Messages", func() {
 		It("should delete the NodeClaim when receiving a spot interruption warning", func() {
@@ -406,6 +423,10 @@ var _ = Describe("InterruptionHandling", func() {
 			ExpectApplied(ctx, env.Client, nodeClaim, node)
 			ExpectSingletonReconciled(ctx, instanceStatusController)
 			ExpectExists(ctx, env.Client, nodeClaim)
+		})
+		It("should record SpotInterrupted events on pods, node, and nodeclaim when receiving a spot interruption warning", func() {
+			ExpectMessagesCreated(spotInterruptionMessage(lo.Must(utils.ParseInstanceID(nodeClaim.Status.ProviderID))))
+			ExpectApplied(ctx, env.Client, nodeClaim, node, pod1, pod2)
 		})
 	})
 })
