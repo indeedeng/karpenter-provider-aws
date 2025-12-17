@@ -30,4 +30,4 @@ Check out the [Docs](https://karpenter.sh/docs/) to learn more.
 - 11/30/2021 [Karpenter vs Kubernetes Cluster Autoscaler](https://youtu.be/3QsVRHVdOnM)
 - 11/19/2021 [Karpenter @ Container Day](https://youtu.be/qxWJRUF6JJc)
 - 05/14/2021 [Groupless Autoscaling with Karpenter @ Kubecon](https://www.youtube.com/watch?v=43g8uPohTgc)
-- 05/04/2021 [Karpenter @ Container Day](https://youtu.be/MZ-4HzOC_ac?t=7137)
+- 05/04/2021 [Karpenter @ Container Day](https://youtu.be/MZ-4HzOC_ac?t=7137) 
