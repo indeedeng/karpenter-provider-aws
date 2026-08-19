@@ -2962,6 +2962,36 @@ eviction-max-pod-grace-period = 10
 		Entry("enabled", true),
 		Entry("disabled", false),
 	)
+	DescribeTable(
+		"should set the capacity reservation preference from the EC2NodeClass",
+		func(preference string, capacityType string, expected ec2types.CapacityReservationPreference) {
+			coreoptions.FromContext(ctx).FeatureGates.ReservedCapacity = true
+			nodeClass.Spec.CapacityReservationPreference = preference
+			nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{{
+				Key:      karpv1.CapacityTypeLabelKey,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{capacityType},
+			}}
+
+			pod := coretest.UnschedulablePod()
+			ExpectApplied(ctx, env.Client, pod, nodePool, nodeClass)
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
+
+			Expect(awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.Len()).ToNot(BeZero())
+			for awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.Len() != 0 {
+				input := awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.Pop()
+				Expect(*input.LaunchTemplateData.CapacityReservationSpecification).To(Equal(ec2types.LaunchTemplateCapacityReservationSpecificationRequest{
+					CapacityReservationPreference: expected,
+				}))
+			}
+		},
+		Entry("open on-demand", "open", karpv1.CapacityTypeOnDemand, ec2types.CapacityReservationPreferenceOpen),
+		Entry("none on-demand", "none", karpv1.CapacityTypeOnDemand, ec2types.CapacityReservationPreferenceNone),
+		Entry("unset on-demand", "", karpv1.CapacityTypeOnDemand, ec2types.CapacityReservationPreferenceNone),
+		// ODCRs only apply to on-demand capacity, so spot is never opted into open reservations.
+		Entry("open spot", "open", karpv1.CapacityTypeSpot, ec2types.CapacityReservationPreferenceNone),
+	)
 })
 
 // ExpectTags verifies that the expected tags are a subset of the tags found

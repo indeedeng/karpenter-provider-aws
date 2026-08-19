@@ -90,6 +90,7 @@ type LaunchTemplate struct {
 	CapacityReservationID            string
 	CapacityReservationType          v1.CapacityReservationType
 	CapacityReservationInterruptible bool
+	CapacityReservationPreference    string
 	Tenancy                          string
 	PlacementGroupID                 string
 	PlacementGroupPartition          int32
@@ -334,6 +335,7 @@ func (r DefaultResolver) resolveLaunchTemplates(
 			CapacityReservationID:            id,
 			CapacityReservationType:          capacityReservationType,
 			CapacityReservationInterruptible: capacityReservationInterruptible,
+			CapacityReservationPreference:    nodeClass.Spec.CapacityReservationPreference,
 			Tenancy:                          tenancyType,
 			PlacementGroupID:                 placementGroupID,
 			PlacementGroupPartition:          placementGroupPartition,
