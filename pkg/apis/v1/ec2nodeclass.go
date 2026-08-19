@@ -53,6 +53,12 @@ type EC2NodeClassSpec struct {
 	// +kubebuilder:validation:MaxItems:=30
 	// +optional
 	CapacityReservationSelectorTerms []CapacityReservationSelectorTerm `json:"capacityReservationSelectorTerms" hash:"ignore"`
+	// CapacityReservationPreference controls whether on-demand instances launched by this nodeclass may run in any
+	// open capacity reservation. When unset, instances are launched with preference "none", matching Karpenter's
+	// behavior when the ReservedCapacity feature gate is enabled. Spot and reserved launches are unaffected.
+	// +kubebuilder:validation:Enum:={open,none}
+	// +optional
+	CapacityReservationPreference string `json:"capacityReservationPreference,omitempty"`
 	// PlacementGroupSelector defines the name or the id of the placement to resolve with the nodeclass.
 	// +kubebuilder:validation:XValidation:message="expected at least one, got none, ['name', 'id']",rule="has(self.name) || has(self.id)"
 	// +kubebuilder:validation:XValidation:message="'name' and 'id' are mutually exclusive",rule="!(has(self.name) && has(self.id))"
