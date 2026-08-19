@@ -253,6 +253,15 @@ spec:
                   x-kubernetes-validations:
                     - message: must have only one blockDeviceMappings with rootVolume
                       rule: self.filter(x, has(x.rootVolume)?x.rootVolume==true:false).size() <= 1
+                capacityReservationPreference:
+                  description: |-
+                    CapacityReservationPreference controls whether on-demand instances launched by this nodeclass may run in any
+                    open capacity reservation. When unset, instances are launched with preference "none", matching Karpenter's
+                    behavior when the ReservedCapacity feature gate is enabled. Spot and reserved launches are unaffected.
+                  enum:
+                    - open
+                    - none
+                  type: string
                 capacityReservationSelectorTerms:
                   description: |-
                     CapacityReservationSelectorTerms is a list of capacity reservation selector terms. Each term is ORed together to
