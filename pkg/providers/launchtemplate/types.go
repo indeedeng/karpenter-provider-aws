@@ -152,11 +152,7 @@ func (b *CreateLaunchTemplateInputBuilder) Build(ctx context.Context) *ec2.Creat
 	// ODCRs, which is a breaking change from the pre-native ODCR support behavior.
 	if b.LaunchMode(ctx) == LaunchModeTargeted {
 		lt.LaunchTemplateData.CapacityReservationSpecification = &ec2types.LaunchTemplateCapacityReservationSpecificationRequest{
-			CapacityReservationPreference: lo.Ternary(
-				b.options.CapacityType == karpv1.CapacityTypeReserved,
-				ec2types.CapacityReservationPreferenceCapacityReservationsOnly,
-				ec2types.CapacityReservationPreferenceNone,
-			),
+			CapacityReservationPreference: b.capacityReservationPreference(),
 			CapacityReservationTarget: lo.Ternary(
 				b.options.CapacityType == karpv1.CapacityTypeReserved,
 				&ec2types.CapacityReservationTarget{
@@ -179,6 +175,19 @@ func (b *CreateLaunchTemplateInputBuilder) Build(ctx context.Context) *ec2.Creat
 			).Else(nil)
 	}
 	return lt
+}
+
+// capacityReservationPreference resolves the launch template's capacity reservation preference. Reserved launches
+// always target their reservation, and only on-demand launches may opt into open ODCRs via the EC2NodeClass. Spot is
+// left at "none" since ODCRs only apply to on-demand capacity.
+func (b *CreateLaunchTemplateInputBuilder) capacityReservationPreference() ec2types.CapacityReservationPreference {
+	if b.options.CapacityType == karpv1.CapacityTypeReserved {
+		return ec2types.CapacityReservationPreferenceCapacityReservationsOnly
+	}
+	if b.options.CapacityType == karpv1.CapacityTypeOnDemand && b.options.CapacityReservationPreference != "" {
+		return ec2types.CapacityReservationPreference(b.options.CapacityReservationPreference)
+	}
+	return ec2types.CapacityReservationPreferenceNone
 }
 
 func (b *CreateLaunchTemplateInputBuilder) buildPlacement() *ec2types.LaunchTemplatePlacementRequest {
