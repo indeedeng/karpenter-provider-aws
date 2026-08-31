@@ -412,7 +412,7 @@ func (p *DefaultProvider) launchInstance(
 	if len(createFleetOutput.Instances) == 0 || len(createFleetOutput.Instances[0].InstanceIds) == 0 {
 		requestID, _ := awsmiddleware.GetRequestIDMetadata(createFleetOutput.ResultMetadata)
 		return ec2types.CreateFleetInstance{}, serrors.Wrap(
-			combineFleetErrors(createFleetOutput.Errors),
+			combineFleetErrors(createFleetOutput.Errors, iceOfferingKeys(createFleetOutput.Errors, capacityType, pgID != "")),
 			middleware.AWSRequestIDLogKey, requestID,
 			middleware.AWSOperationNameLogKey, "CreateFleet",
 			middleware.AWSServiceNameLogKey, "EC2",
@@ -786,7 +786,7 @@ func instancesFromOutput(ctx context.Context, out *ec2.DescribeInstancesOutput) 
 	return lo.Map(instances, func(i ec2types.Instance, _ int) *Instance { return NewInstance(ctx, i) }), nil
 }
 
-func combineFleetErrors(fleetErrs []ec2types.CreateFleetError) (errs error) {
+func combineFleetErrors(fleetErrs []ec2types.CreateFleetError, keys []cloudprovider.OfferingKey) (errs error) {
 	unique := sets.NewString()
 	for _, err := range fleetErrs {
 		unique.Insert(fmt.Sprintf("%s: %s", aws.ToString(err.ErrorCode), aws.ToString(err.ErrorMessage)))
@@ -799,8 +799,41 @@ func combineFleetErrors(fleetErrs []ec2types.CreateFleetError) (errs error) {
 		return awserrors.IsUnfulfillableCapacity(err) || awserrors.IsServiceLinkedRoleCreationNotPermitted(err)
 	})
 	if iceErrorCount == len(fleetErrs) {
-		return cloudprovider.NewInsufficientCapacityError(fmt.Errorf("with fleet error(s), %w", errs))
+		return cloudprovider.NewInsufficientCapacityError(fmt.Errorf("with fleet error(s), %w", errs), keys...)
 	}
 	reason, message := awserrors.ToReasonMessage(errs)
 	return cloudprovider.NewCreateError(errs, reason, message)
+}
+
+// iceOfferingKeys reports which capacity pools CreateFleet found unfulfillable, so that core
+// can back off those pools rather than throttling the whole NodePool. CreateFleet names the
+// instance type and zone it actually attempted on each error, which is the same attribution
+// updateUnavailableOfferingsCache uses for the provider-side ICE cache.
+//
+// Attribution is deliberately conservative, because core's key has no reservation or placement
+// group dimension and its backoff is global across NodePools. A failure that is only true
+// within one reservation or one placement group would therefore be over-attributed if reported
+// here, blocking launches that would have succeeded. Those cases are already handled at the
+// right granularity by the capacity reservation and unavailable offerings caches, and omitting
+// them is safe: core falls back to its per-NodePool budget.
+func iceOfferingKeys(fleetErrs []ec2types.CreateFleetError, capacityType string, placementGroupScoped bool) []cloudprovider.OfferingKey {
+	if capacityType == karpv1.CapacityTypeReserved || placementGroupScoped {
+		return nil
+	}
+	keys := sets.New[cloudprovider.OfferingKey]()
+	for _, err := range fleetErrs {
+		if !awserrors.IsUnfulfillableCapacity(err) {
+			continue
+		}
+		if err.LaunchTemplateAndOverrides == nil || err.LaunchTemplateAndOverrides.Overrides == nil {
+			continue
+		}
+		overrides := err.LaunchTemplateAndOverrides.Overrides
+		instanceType, zone := string(overrides.InstanceType), aws.ToString(overrides.AvailabilityZone)
+		if instanceType == "" || zone == "" {
+			continue
+		}
+		keys.Insert(cloudprovider.OfferingKey{InstanceType: instanceType, CapacityType: capacityType, Zone: zone})
+	}
+	return keys.UnsortedList()
 }
