@@ -24,9 +24,21 @@ import (
 
 const (
 	cloudProviderSubsystem = "cloudprovider"
-	zoneLabel              = "zone"
 	zoneIDLabel            = "zone_id"
 )
+
+// zoneID is AWS-specific: the zone's account-independent identifier, which `zone` is not.
+// Co-located here rather than in core because core has no notion of it.
+var zoneID = opmetrics.Label{
+	Name: zoneIDLabel,
+	Help: "The account-independent identifier of the availability zone, e.g. `use1-az1`.",
+}
+
+// launchFailureReason is the EC2 error code CreateFleet returned for the offering.
+var launchFailureReason = opmetrics.Label{
+	Name: metrics.ReasonLabel,
+	Help: "The EC2 error code returned for the failed CreateFleet offering.",
+}
 
 var (
 	// Counts per-offering CreateFleet errors, not per-NodeClaim attempts: one CreateFleet
@@ -39,11 +51,11 @@ var (
 			Name:      "instance_launch_failures_total",
 			Help:      "Number of instance launch (CreateFleet offering) failures, dimensioned by availability zone, zone ID, capacity type, and launch failure reason.",
 		},
-		[]string{
-			zoneLabel,
-			zoneIDLabel,
-			metrics.CapacityTypeLabel,
-			metrics.ReasonLabel,
+		[]opmetrics.Label{
+			metrics.Zone,
+			zoneID,
+			metrics.CapacityType,
+			launchFailureReason,
 		},
 	)
 	InstanceTerminationFailuresTotal = opmetrics.NewPrometheusCounter(
@@ -54,9 +66,9 @@ var (
 			Name:      "instance_termination_failures_total",
 			Help:      "Number of instance termination (TerminateInstances) failures, dimensioned by availability zone and zone ID.",
 		},
-		[]string{
-			zoneLabel,
-			zoneIDLabel,
+		[]opmetrics.Label{
+			metrics.Zone,
+			zoneID,
 		},
 	)
 )

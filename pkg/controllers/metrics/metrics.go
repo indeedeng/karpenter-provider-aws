@@ -23,10 +23,15 @@ import (
 
 const (
 	cloudProviderSubsystem = "cloudprovider"
-	instanceTypeLabel      = "instance_type"
-	capacityTypeLabel      = "capacity_type"
-	zoneLabel              = "zone"
 )
+
+// offeringDimensions identifies a capacity pool. All three dimensions are already described by
+// core, so they are referenced rather than redeclared.
+var offeringDimensions = []opmetrics.Label{
+	metrics.InstanceType,
+	metrics.CapacityType,
+	metrics.Zone,
+}
 
 var (
 	InstanceTypeOfferingAvailable = opmetrics.NewPrometheusGauge(
@@ -37,11 +42,7 @@ var (
 			Name:      "instance_type_offering_available",
 			Help:      "Instance type offering availability, based on instance type, capacity type, and zone",
 		},
-		[]string{
-			instanceTypeLabel,
-			capacityTypeLabel,
-			zoneLabel,
-		},
+		offeringDimensions,
 	)
 	InstanceTypeOfferingPriceEstimate = opmetrics.NewPrometheusGauge(
 		crmetrics.Registry,
@@ -51,10 +52,6 @@ var (
 			Name:      "instance_type_offering_price_estimate",
 			Help:      "Instance type offering estimated hourly price used when making informed decisions on node cost calculation, based on instance type, capacity type, and zone.",
 		},
-		[]string{
-			instanceTypeLabel,
-			capacityTypeLabel,
-			zoneLabel,
-		},
+		offeringDimensions,
 	)
 )

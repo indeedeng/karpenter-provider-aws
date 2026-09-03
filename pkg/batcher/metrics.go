@@ -27,6 +27,13 @@ const (
 	batcherNameLabel = "batcher"
 )
 
+// batcherName is the AWS API call the batcher coalesces requests for. Not enumerated: the value
+// set is the set of batched EC2 calls, which changes as batchers are added.
+var batcherName = opmetrics.Label{
+	Name: batcherNameLabel,
+	Help: "The name of the batcher, which is the AWS API call whose requests it coalesces.",
+}
+
 // SizeBuckets returns a []float64 of default threshold values for size histograms.
 // Each returned slice is new and may be modified without impacting other bucket definitions.
 func SizeBuckets() []float64 {
@@ -41,12 +48,12 @@ var (
 		Name:      "batch_time_seconds",
 		Help:      "Duration of the batching window per batcher",
 		Buckets:   metrics.DurationBuckets(),
-	}, []string{batcherNameLabel})
+	}, []opmetrics.Label{batcherName})
 	BatchSize = opmetrics.NewPrometheusHistogram(crmetrics.Registry, prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Subsystem: batcherSubsystem,
 		Name:      "batch_size",
 		Help:      "Size of the request batch per batcher",
 		Buckets:   SizeBuckets(),
-	}, []string{batcherNameLabel})
+	}, []opmetrics.Label{batcherName})
 )

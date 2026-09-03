@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/metrics"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 )
 
@@ -83,16 +84,16 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 
 	for dimensions, available := range availability {
 		InstanceTypeOfferingAvailable.Set(float64(lo.Ternary(available, 1, 0)), map[string]string{
-			instanceTypeLabel: dimensions.instanceType,
-			capacityTypeLabel: dimensions.capacityType,
-			zoneLabel:         dimensions.zone,
+			metrics.InstanceTypeLabel: dimensions.instanceType,
+			metrics.CapacityTypeLabel: dimensions.capacityType,
+			metrics.ZoneLabel:         dimensions.zone,
 		})
 	}
 	for dimensions, p := range price {
 		InstanceTypeOfferingPriceEstimate.Set(p, map[string]string{
-			instanceTypeLabel: dimensions.instanceType,
-			capacityTypeLabel: dimensions.capacityType,
-			zoneLabel:         dimensions.zone,
+			metrics.InstanceTypeLabel: dimensions.instanceType,
+			metrics.CapacityTypeLabel: dimensions.capacityType,
+			metrics.ZoneLabel:         dimensions.zone,
 		})
 	}
 	return reconciler.Result{RequeueAfter: time.Minute}, nil

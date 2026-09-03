@@ -29,6 +29,20 @@ const (
 )
 
 var (
+	// messageType is the kind of interruption message pulled off the SQS queue. Not enumerated:
+	// the set tracks the EC2 event types Karpenter parses, plus `noop` for anything unrecognized.
+	messageType = opmetrics.Label{
+		Name: messageTypeLabel,
+		Help: "The type of interruption message received from the SQS queue.",
+	}
+	// category is the EC2 DescribeInstanceStatus check that reported unhealthy.
+	category = opmetrics.Label{
+		Name: categoryLabel,
+		Help: "The EC2 instance status check category that reported unhealthy.",
+	}
+)
+
+var (
 	ReceivedMessages = opmetrics.NewPrometheusCounter(
 		crmetrics.Registry,
 		prometheus.CounterOpts{
@@ -37,7 +51,7 @@ var (
 			Name:      "received_messages_total",
 			Help:      "Count of messages received from the SQS queue. Broken down by message type and whether the message was actionable.",
 		},
-		[]string{messageTypeLabel},
+		[]opmetrics.Label{messageType},
 	)
 	DeletedMessages = opmetrics.NewPrometheusCounter(
 		crmetrics.Registry,
@@ -47,7 +61,7 @@ var (
 			Name:      "deleted_messages_total",
 			Help:      "Count of messages deleted from the SQS queue.",
 		},
-		[]string{},
+		[]opmetrics.Label{},
 	)
 	MessageLatency = opmetrics.NewPrometheusHistogram(
 		crmetrics.Registry,
@@ -58,7 +72,7 @@ var (
 			Help:      "Amount of time an interruption message is on the queue before it is processed by karpenter.",
 			Buckets:   metrics.DurationBuckets(),
 		},
-		[]string{},
+		[]opmetrics.Label{},
 	)
 	InstanceStatusUnhealthy = opmetrics.NewPrometheusCounter(
 		crmetrics.Registry,
@@ -68,6 +82,6 @@ var (
 			Name:      "instance_status_unhealthy_total",
 			Help:      "Count of unique unhealthy instance statuses detected from EC2 DescribeInstanceStatus. Broken down by status check category.",
 		},
-		[]string{categoryLabel},
+		[]opmetrics.Label{category},
 	)
 )

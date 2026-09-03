@@ -274,8 +274,8 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 		}); err != nil {
 			// Intentional zonal-shift skips return earlier and are deliberately not counted here.
 			InstanceTerminationFailuresTotal.Inc(map[string]string{
-				zoneLabel:   out.Zone,
-				zoneIDLabel: out.ZoneID,
+				karpentermetrics.ZoneLabel: out.Zone,
+				zoneIDLabel:                out.ZoneID,
 			})
 			return err
 		}
@@ -582,7 +582,7 @@ func (p *DefaultProvider) updateUnavailableOfferingsCache(
 		}
 		reason, _ := awserrors.ToReasonMessage(fmt.Errorf("%s: %s", aws.ToString(err.ErrorCode), aws.ToString(err.ErrorMessage)))
 		InstanceLaunchFailuresTotal.Inc(map[string]string{
-			zoneLabel:                          zone,
+			karpentermetrics.ZoneLabel:         zone,
 			zoneIDLabel:                        zoneID,
 			karpentermetrics.CapacityTypeLabel: capacityType,
 			karpentermetrics.ReasonLabel:       reason,

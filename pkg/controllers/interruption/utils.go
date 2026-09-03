@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 	"sigs.k8s.io/karpenter/pkg/metrics"
+	nodeclaimutils "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 
 	v1 "github.com/aws/karpenter-provider-aws/pkg/apis/v1"
 	"github.com/aws/karpenter-provider-aws/pkg/cache"
@@ -163,6 +164,10 @@ func (h *InterruptionHandler) deleteNodeClaim(ctx context.Context, msg messages.
 		metrics.ReasonLabel:       string(msg.Kind()),
 		metrics.NodePoolLabel:     nodeClaim.Labels[karpv1.NodePoolLabelKey],
 		metrics.CapacityTypeLabel: nodeClaim.Labels[karpv1.CapacityTypeLabelKey],
+		// Interruption is involuntary, so no consolidation policy applies. Mirrors how core
+		// labels the other involuntary disruption paths.
+		metrics.ConsolidationPolicyLabel: "",
+		metrics.TerminationModeLabel:     nodeclaimutils.DisruptionTerminationMode(nodeClaim),
 	})
 	return nil
 }

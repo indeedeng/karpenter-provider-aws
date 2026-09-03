@@ -51,6 +51,7 @@ import (
 	"github.com/aws/karpenter-provider-aws/pkg/providers/subnet"
 
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/metrics"
 	"sigs.k8s.io/karpenter/pkg/utils/pretty"
 )
 
@@ -229,10 +230,10 @@ func (p *DefaultProvider) get(ctx context.Context, nodeClass NodeClass, name ec2
 		it.Capacity[corev1.ResourceMemory] = cached.(resource.Quantity)
 	}
 	InstanceTypeVCPU.Set(float64(lo.FromPtr(info.VCpuInfo.DefaultVCpus)), map[string]string{
-		instanceTypeLabel: string(info.InstanceType),
+		metrics.InstanceTypeLabel: string(info.InstanceType),
 	})
 	InstanceTypeMemory.Set(float64(lo.FromPtr(info.MemoryInfo.SizeInMiB)*1024*1024), map[string]string{
-		instanceTypeLabel: string(info.InstanceType),
+		metrics.InstanceTypeLabel: string(info.InstanceType),
 	})
 	return it, nil
 }
