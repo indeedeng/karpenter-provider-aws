@@ -412,7 +412,7 @@ func (p *DefaultProvider) launchInstance(
 	if len(createFleetOutput.Instances) == 0 || len(createFleetOutput.Instances[0].InstanceIds) == 0 {
 		requestID, _ := awsmiddleware.GetRequestIDMetadata(createFleetOutput.ResultMetadata)
 		return ec2types.CreateFleetInstance{}, serrors.Wrap(
-			combineFleetErrors(createFleetOutput.Errors, iceOfferingKeys(createFleetOutput.Errors, capacityType, pgID != "")),
+			combineFleetErrors(createFleetOutput.Errors, iceOfferingKeys(createFleetOutput.Errors, capacityType)),
 			middleware.AWSRequestIDLogKey, requestID,
 			middleware.AWSOperationNameLogKey, "CreateFleet",
 			middleware.AWSServiceNameLogKey, "EC2",
@@ -794,9 +794,10 @@ func combineFleetErrors(fleetErrs []ec2types.CreateFleetError, keys []cloudprovi
 	for errorCode := range unique {
 		errs = multierr.Append(errs, errors.New(errorCode))
 	}
-	// If all the Fleet errors are ICE errors then we should wrap the combined error in the generic ICE error
+	// Only a result made entirely of capacity failures is an ICE. Configuration and authorization
+	// errors must remain CreateErrors so core doesn't debit offering budgets for healthy capacity.
 	iceErrorCount := lo.CountBy(fleetErrs, func(err ec2types.CreateFleetError) bool {
-		return awserrors.IsUnfulfillableCapacity(err) || awserrors.IsServiceLinkedRoleCreationNotPermitted(err)
+		return awserrors.IsUnfulfillableCapacity(err)
 	})
 	if iceErrorCount == len(fleetErrs) {
 		return cloudprovider.NewInsufficientCapacityError(fmt.Errorf("with fleet error(s), %w", errs), keys...)
@@ -810,16 +811,10 @@ func combineFleetErrors(fleetErrs []ec2types.CreateFleetError, keys []cloudprovi
 // instance type and zone it actually attempted on each error, which is the same attribution
 // updateUnavailableOfferingsCache uses for the provider-side ICE cache.
 //
-// Attribution is deliberately conservative, because core's key has no reservation or placement
-// group dimension and its backoff is global across NodePools. A failure that is only true
-// within one reservation or one placement group would therefore be over-attributed if reported
-// here, blocking launches that would have succeeded. Those cases are already handled at the
-// right granularity by the capacity reservation and unavailable offerings caches, and omitting
-// them is safe: core falls back to its per-NodePool budget.
-func iceOfferingKeys(fleetErrs []ec2types.CreateFleetError, capacityType string, placementGroupScoped bool) []cloudprovider.OfferingKey {
-	if capacityType == karpv1.CapacityTypeReserved || placementGroupScoped {
-		return nil
-	}
+// Core's reservation settlement uses these exact keys to clamp only the offerings CreateFleet
+// rejected. This includes reserved and placement-group launches: returning no keys would make
+// core conservatively clamp every candidate saved on the NodeClaim reservation.
+func iceOfferingKeys(fleetErrs []ec2types.CreateFleetError, capacityType string) []cloudprovider.OfferingKey {
 	keys := sets.New[cloudprovider.OfferingKey]()
 	for _, err := range fleetErrs {
 		if !awserrors.IsUnfulfillableCapacity(err) {

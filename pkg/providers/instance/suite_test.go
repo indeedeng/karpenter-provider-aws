@@ -17,6 +17,7 @@ package instance_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -203,6 +204,114 @@ var _ = Describe("InstanceProvider", func() {
 		Expect(awsEnv.UnavailableOfferingsCache.IsUnavailable("m5.xlarge", "test-zone-1b",
 			test.GetSubnetsFromZone("test-zone-1b", nodeClass.ZoneInfo()), karpv1.CapacityTypeOnDemand)).To(BeTrue())
 	})
+	It("should succeed when CreateFleet launches an instance after another offering returns ICE", func() {
+		nodeClaim.Spec.Requirements = append(nodeClaim.Spec.Requirements, karpv1.NodeSelectorRequirementWithMinValues{
+			Key:      karpv1.CapacityTypeLabelKey,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{karpv1.CapacityTypeOnDemand},
+		})
+		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		awsEnv.EC2API.InsufficientCapacityPools.Set([]fake.CapacityPool{{
+			CapacityType: karpv1.CapacityTypeOnDemand,
+			InstanceType: "m5.xlarge",
+			Zone:         "test-zone-1a",
+		}})
+
+		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
+		Expect(err).ToNot(HaveOccurred())
+		instanceTypes = lo.Filter(instanceTypes, func(i *corecloudprovider.InstanceType, _ int) bool {
+			return i.Name == "m5.xlarge"
+		})
+
+		instance, err := awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(instance).ToNot(BeNil())
+		Expect(awsEnv.UnavailableOfferingsCache.IsUnavailable("m5.xlarge", "test-zone-1a",
+			test.GetSubnetsFromZone("test-zone-1a", nodeClass.ZoneInfo()), karpv1.CapacityTypeOnDemand)).To(BeTrue())
+	})
+	It("should return attributed ICE errors only to unfulfilled callers in a partially fulfilled batch", func() {
+		const (
+			requestCount = 5
+			successCount = 3
+		)
+		nodeClaim.Spec.Requirements = append(nodeClaim.Spec.Requirements, karpv1.NodeSelectorRequirementWithMinValues{
+			Key:      karpv1.CapacityTypeLabelKey,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{karpv1.CapacityTypeOnDemand},
+		})
+		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		expectedKeys := []corecloudprovider.OfferingKey{
+			{InstanceType: "m5.xlarge", CapacityType: karpv1.CapacityTypeOnDemand, Zone: "test-zone-1a"},
+			{InstanceType: "m5.xlarge", CapacityType: karpv1.CapacityTypeOnDemand, Zone: "test-zone-1b"},
+		}
+		awsEnv.EC2API.CreateFleetBehavior.Output.Set(&ec2.CreateFleetOutput{
+			Instances: []ec2types.CreateFleetInstance{{
+				InstanceIds:  []string{fake.InstanceID(), fake.InstanceID(), fake.InstanceID()},
+				InstanceType: "m5.xlarge",
+				LaunchTemplateAndOverrides: &ec2types.LaunchTemplateAndOverridesResponse{
+					Overrides: &ec2types.FleetLaunchTemplateOverrides{
+						InstanceType:     "m5.xlarge",
+						AvailabilityZone: lo.ToPtr("test-zone-1a"),
+						SubnetId:         lo.ToPtr("subnet-1a-1"),
+					},
+				},
+			}},
+			Errors: lo.Map(expectedKeys, func(key corecloudprovider.OfferingKey, _ int) ec2types.CreateFleetError {
+				return ec2types.CreateFleetError{
+					ErrorCode:    lo.ToPtr("InsufficientInstanceCapacity"),
+					ErrorMessage: lo.ToPtr("There is no On-Demand capacity available that matches your request."),
+					LaunchTemplateAndOverrides: &ec2types.LaunchTemplateAndOverridesResponse{
+						Overrides: &ec2types.FleetLaunchTemplateOverrides{
+							InstanceType:     ec2types.InstanceType(key.InstanceType),
+							AvailabilityZone: lo.ToPtr(key.Zone),
+						},
+					},
+				}
+			}),
+		})
+		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
+		Expect(err).ToNot(HaveOccurred())
+		instanceTypes = lo.Filter(instanceTypes, func(i *corecloudprovider.InstanceType, _ int) bool {
+			return i.Name == "m5.xlarge"
+		})
+
+		type result struct {
+			instance *instance.Instance
+			err      error
+		}
+		results := make(chan result, requestCount)
+		var wg sync.WaitGroup
+		for range requestCount {
+			wg.Go(func() {
+				created, err := awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
+				results <- result{instance: created, err: err}
+			})
+		}
+		wg.Wait()
+		close(results)
+
+		var successful, unfulfilled int
+		for result := range results {
+			if result.instance != nil {
+				successful++
+				Expect(result.err).ToNot(HaveOccurred())
+				Expect(corecloudprovider.IsInsufficientCapacityError(result.err)).To(BeFalse())
+				continue
+			}
+			unfulfilled++
+			iceErr, ok := lo.ErrorsAs[*corecloudprovider.InsufficientCapacityError](result.err)
+			Expect(ok).To(BeTrue())
+			Expect(iceErr.Keys).To(ConsistOf(expectedKeys))
+		}
+		Expect(successful).To(Equal(successCount))
+		Expect(unfulfilled).To(Equal(requestCount - successCount))
+		Expect(awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Len()).To(Equal(1))
+		createFleetInput := awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Pop()
+		Expect(lo.FromPtr(createFleetInput.TargetCapacitySpecification.TotalTargetCapacity)).To(Equal(int32(requestCount)))
+	})
 	It("should attribute the ICE error to the capacity pools that failed", func() {
 		nodeClaim.Spec.Requirements = append(nodeClaim.Spec.Requirements, karpv1.NodeSelectorRequirementWithMinValues{
 			Key:      karpv1.CapacityTypeLabelKey,
@@ -274,7 +383,7 @@ var _ = Describe("InstanceProvider", func() {
 		Expect(ok).To(BeTrue())
 		Expect(iceErr.Keys).To(BeEmpty())
 	})
-	It("should return an ICE error when spot instances are used and SpotSLR can't be created", func() {
+	It("should return a CreateError when spot instances are used and SpotSLR can't be created", func() {
 		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 		awsEnv.EC2API.CreateFleetBehavior.Output.Set(&ec2.CreateFleetOutput{
@@ -309,9 +418,10 @@ var _ = Describe("InstanceProvider", func() {
 			return i.Name == "m5.xlarge"
 		})
 
-		// Since all the capacity pools are ICEd. This should return back an ICE error
+		// Authorization failures do not describe offering capacity and must not arm core budgets.
 		instance, err := awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
-		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
+		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+		Expect(err).To(HaveOccurred())
 		Expect(instance).To(BeNil())
 
 		// Capacity should get ICEd when this error is received
@@ -362,7 +472,6 @@ var _ = Describe("InstanceProvider", func() {
 
 		// Since all the capacity pools are ICEd. This should return back an ICE error
 		instance, err := awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
-		fmt.Println(instance)
 		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
 		Expect(instance).To(BeNil())
 
@@ -416,7 +525,13 @@ var _ = Describe("InstanceProvider", func() {
 		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
 		Expect(err).ToNot(HaveOccurred())
 		instance, err := awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
-		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
+		iceErr, ok := lo.ErrorsAs[*corecloudprovider.InsufficientCapacityError](err)
+		Expect(ok).To(BeTrue())
+		Expect(iceErr.Keys).To(ConsistOf(corecloudprovider.OfferingKey{
+			InstanceType: "m5.large",
+			CapacityType: karpv1.CapacityTypeReserved,
+			Zone:         "test-zone-1a",
+		}))
 		Expect(instance).To(BeNil())
 
 		// Ensure we marked the reservation as unavailable after encountering the error

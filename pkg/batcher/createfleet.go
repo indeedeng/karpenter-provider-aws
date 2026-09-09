@@ -94,7 +94,7 @@ func execCreateFleetBatch(ec2api sdk.EC2API) BatchExecutor[ec2.CreateFleetInput,
 				})
 			}
 		}
-		if requestIdx != len(inputs) {
+		if requestIdx+1 < len(inputs) {
 			// we should receive some sort of error, but just in case
 			if len(output.Errors) == 0 {
 				output.Errors = append(output.Errors, ec2types.CreateFleetError{

@@ -14,10 +14,9 @@ limitations under the License.
 
 package instance
 
-// iceOfferingKeys decides what core is told about a launch failure, and the interesting cases
-// are the ones it must stay silent about. Driving reserved and placement-group launches through
-// InstanceProvider.Create would need a reservation or a placement group in the fake, so these
-// exercise the helper directly.
+// iceOfferingKeys decides what core is told about a launch failure. Driving reserved and
+// placement-group launches through InstanceProvider.Create would need extra fake state, so these
+// exercise the attribution helper directly.
 
 import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -47,7 +46,7 @@ var _ = Describe("ICE offering attribution", func() {
 		keys := iceOfferingKeys([]ec2types.CreateFleetError{
 			fleetError("InsufficientInstanceCapacity", "m5.xlarge", "test-zone-1a"),
 			fleetError("InsufficientInstanceCapacity", "m5.large", "test-zone-1b"),
-		}, karpv1.CapacityTypeOnDemand, false)
+		}, karpv1.CapacityTypeOnDemand)
 
 		Expect(keys).To(ConsistOf(
 			corecloudprovider.OfferingKey{InstanceType: "m5.xlarge", CapacityType: karpv1.CapacityTypeOnDemand, Zone: "test-zone-1a"},
@@ -57,7 +56,7 @@ var _ = Describe("ICE offering attribution", func() {
 	It("should carry the capacity type the launch actually used", func() {
 		keys := iceOfferingKeys([]ec2types.CreateFleetError{
 			fleetError("InsufficientInstanceCapacity", "m5.xlarge", "test-zone-1a"),
-		}, karpv1.CapacityTypeSpot, false)
+		}, karpv1.CapacityTypeSpot)
 
 		// Spot exhaustion in a zone says nothing about on-demand in that zone, so the capacity
 		// type has to be part of what core backs off.
@@ -69,7 +68,7 @@ var _ = Describe("ICE offering attribution", func() {
 		keys := iceOfferingKeys([]ec2types.CreateFleetError{
 			fleetError("MaxSpotInstanceCountExceeded", "m5.xlarge", "test-zone-1a"),
 			fleetError("VcpuLimitExceeded", "m5.large", "test-zone-1a"),
-		}, karpv1.CapacityTypeSpot, false)
+		}, karpv1.CapacityTypeSpot)
 
 		Expect(keys).To(HaveLen(2))
 	})
@@ -78,7 +77,7 @@ var _ = Describe("ICE offering attribution", func() {
 			fleetError("InsufficientInstanceCapacity", "m5.xlarge", "test-zone-1a"),
 			fleetError("InsufficientInstanceCapacity", "m5.xlarge", "test-zone-1a"),
 			fleetError("MaxSpotInstanceCountExceeded", "m5.xlarge", "test-zone-1a"),
-		}, karpv1.CapacityTypeSpot, false)
+		}, karpv1.CapacityTypeSpot)
 
 		Expect(keys).To(HaveLen(1))
 	})
@@ -86,7 +85,7 @@ var _ = Describe("ICE offering attribution", func() {
 		keys := iceOfferingKeys([]ec2types.CreateFleetError{
 			fleetError("AuthFailure.ServiceLinkedRoleCreationNotPermitted", "m5.xlarge", "test-zone-1a"),
 			fleetError("InsufficientInstanceCapacity", "m5.large", "test-zone-1b"),
-		}, karpv1.CapacityTypeSpot, false)
+		}, karpv1.CapacityTypeSpot)
 
 		// A missing service-linked role is not a property of the m5.xlarge/1a pool, and backing
 		// that pool off would outlast the misconfiguration it actually indicates.
@@ -94,24 +93,23 @@ var _ = Describe("ICE offering attribution", func() {
 			corecloudprovider.OfferingKey{InstanceType: "m5.large", CapacityType: karpv1.CapacityTypeSpot, Zone: "test-zone-1b"},
 		))
 	})
-	It("should stay silent for a reserved launch", func() {
+	It("should attribute a reserved offering failure", func() {
 		keys := iceOfferingKeys([]ec2types.CreateFleetError{
 			fleetError("ReservationCapacityExceeded", "m5.xlarge", "test-zone-1a"),
-		}, karpv1.CapacityTypeReserved, false)
+		}, karpv1.CapacityTypeReserved)
 
-		// An exhausted reservation is narrower than the instanceType/zone pool core would back
-		// off. The capacity reservation provider already tracks it by reservation ID.
-		Expect(keys).To(BeEmpty())
+		Expect(keys).To(ConsistOf(
+			corecloudprovider.OfferingKey{InstanceType: "m5.xlarge", CapacityType: karpv1.CapacityTypeReserved, Zone: "test-zone-1a"},
+		))
 	})
-	It("should stay silent for a placement group scoped launch", func() {
+	It("should attribute a placement-group launch to its attempted offering", func() {
 		keys := iceOfferingKeys([]ec2types.CreateFleetError{
 			fleetError("InsufficientInstanceCapacity", "m5.xlarge", "test-zone-1a"),
-		}, karpv1.CapacityTypeOnDemand, true)
+		}, karpv1.CapacityTypeOnDemand)
 
-		// The pool may have capacity for anyone not asking to land inside this placement group,
-		// and core's backoff is global across NodePools, so reporting it would block launches
-		// that would have succeeded.
-		Expect(keys).To(BeEmpty())
+		Expect(keys).To(ConsistOf(
+			corecloudprovider.OfferingKey{InstanceType: "m5.xlarge", CapacityType: karpv1.CapacityTypeOnDemand, Zone: "test-zone-1a"},
+		))
 	})
 	It("should skip errors with no launch attribution", func() {
 		keys := iceOfferingKeys([]ec2types.CreateFleetError{
@@ -123,13 +121,49 @@ var _ = Describe("ICE offering attribution", func() {
 			fleetError("InsufficientInstanceCapacity", "", "test-zone-1a"),
 			fleetError("InsufficientInstanceCapacity", "m5.xlarge", ""),
 			fleetError("InsufficientInstanceCapacity", "m5.large", "test-zone-1b"),
-		}, karpv1.CapacityTypeOnDemand, false)
+		}, karpv1.CapacityTypeOnDemand)
 
 		Expect(keys).To(ConsistOf(
 			corecloudprovider.OfferingKey{InstanceType: "m5.large", CapacityType: karpv1.CapacityTypeOnDemand, Zone: "test-zone-1b"},
 		))
 	})
 	It("should report nothing when there are no errors", func() {
-		Expect(iceOfferingKeys(nil, karpv1.CapacityTypeOnDemand, false)).To(BeEmpty())
+		Expect(iceOfferingKeys(nil, karpv1.CapacityTypeOnDemand)).To(BeEmpty())
+	})
+})
+
+var _ = Describe("Fleet error classification", func() {
+	It("should return an attributed ICE only when every error is a capacity failure", func() {
+		keys := []corecloudprovider.OfferingKey{{
+			InstanceType: "m5.xlarge",
+			CapacityType: karpv1.CapacityTypeSpot,
+			Zone:         "test-zone-1a",
+		}}
+
+		err := combineFleetErrors([]ec2types.CreateFleetError{
+			fleetError("InsufficientInstanceCapacity", "m5.xlarge", "test-zone-1a"),
+			fleetError("MaxSpotInstanceCountExceeded", "m5.xlarge", "test-zone-1b"),
+		}, keys)
+
+		ice, ok := lo.ErrorsAs[*corecloudprovider.InsufficientCapacityError](err)
+		Expect(ok).To(BeTrue())
+		Expect(ice.Keys).To(Equal(keys))
+	})
+	It("should return a CreateError for mixed capacity and non-capacity failures", func() {
+		err := combineFleetErrors([]ec2types.CreateFleetError{
+			fleetError("InsufficientInstanceCapacity", "m5.xlarge", "test-zone-1a"),
+			fleetError("UnauthorizedOperation", "m5.xlarge", "test-zone-1b"),
+		}, nil)
+
+		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+		Expect(err).To(HaveOccurred())
+	})
+	It("should not classify service-linked role authorization as capacity failure", func() {
+		err := combineFleetErrors([]ec2types.CreateFleetError{
+			fleetError("AuthFailure.ServiceLinkedRoleCreationNotPermitted", "m5.xlarge", "test-zone-1a"),
+		}, nil)
+
+		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+		Expect(err).To(HaveOccurred())
 	})
 })
