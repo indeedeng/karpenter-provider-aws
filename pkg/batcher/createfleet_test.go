@@ -294,6 +294,7 @@ var _ = Describe("CreateFleet Batching", func() {
 		})
 		var wg sync.WaitGroup
 		var receivedInstance int64
+		var unfulfilled int64
 		var numErrors int64
 		for range 5 {
 			wg.Go(func() {
@@ -312,6 +313,8 @@ var _ = Describe("CreateFleet Batching", func() {
 				Expect(instanceIds).To(Or(HaveLen(0), HaveLen(1)))
 				if len(instanceIds) == 1 {
 					atomic.AddInt64(&receivedInstance, 1)
+				} else {
+					atomic.AddInt64(&unfulfilled, 1)
 				}
 			})
 		}
@@ -323,6 +326,7 @@ var _ = Describe("CreateFleet Batching", func() {
 		Expect(*call.TargetCapacitySpecification.TotalTargetCapacity).To(BeNumerically("==", 5))
 		// but got three instances and the errors were returned to all five calls
 		Expect(receivedInstance).To(BeNumerically("==", 3))
+		Expect(unfulfilled).To(BeNumerically("==", 2))
 		Expect(numErrors).To(BeNumerically("==", 5))
 	})
 })

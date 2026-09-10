@@ -26,7 +26,7 @@ Karpenter surfaces environment variables and CLI parameters to allow you to conf
 | EKS_CONTROL_PLANE | \-\-eks-control-plane | Marking this true means that your cluster is running with an EKS control plane and Karpenter should attempt to discover cluster details from the DescribeCluster API |
 | ENABLE_PROFILING | \-\-enable-profiling | Enable the profiling on the metric endpoint|
 | ENABLE_ZONAL_SHIFT | \-\-enable-zonal-shift | If true, then enable zonal shifting feature.|
-| FEATURE_GATES | \-\-feature-gates | Optional features can be enabled / disabled using feature gates. Current options are: NodeRepair, ReservedCapacity, SpotToSpotConsolidation, NodeOverlay, StaticCapacity, and CapacityBuffer. (default = NodeRepair=false,ReservedCapacity=true,SpotToSpotConsolidation=false,NodeOverlay=false,StaticCapacity=false,CapacityBuffer=false)|
+| FEATURE_GATES | \-\-feature-gates | Optional features can be enabled / disabled using feature gates. Current options are: NodeRepair, ReservedCapacity, SpotToSpotConsolidation, NodeOverlay, StaticCapacity, CapacityBuffer, and LaunchBackoff. (default = NodeRepair=false,ReservedCapacity=true,SpotToSpotConsolidation=false,NodeOverlay=false,StaticCapacity=false,CapacityBuffer=false,LaunchBackoff=false)|
 | HEALTH_PROBE_PORT | \-\-health-probe-port | The port the health probe endpoint binds to for reporting controller health (default = 8081)|
 | IGNORE_DRA_REQUESTS | \-\-ignore-dra-requests | When set, Karpenter will ignore pods' DRA requests during scheduling simulations. NOTE: This flag will be removed once formal DRA support is GA in Karpenter.|
 | INTERRUPTION_QUEUE | \-\-interruption-queue | Interruption queue is the name of the SQS queue used for processing interruption events from EC2. Interruption handling is disabled if not specified. Enabling interruption handling may require additional permissions on the controller service account. Additional permissions are outlined in the docs.|
@@ -39,6 +39,7 @@ Karpenter surfaces environment variables and CLI parameters to allow you to conf
 | LOG_ERROR_OUTPUT_PATHS | \-\-log-error-output-paths | Optional comma separated paths for logging error output (default = stderr)|
 | LOG_LEVEL | \-\-log-level | Log verbosity level. Can be one of 'debug', 'info', or 'error' (default = info)|
 | LOG_OUTPUT_PATHS | \-\-log-output-paths | Optional comma separated paths for directing log output (default = stdout)|
+| MAX_PODS_EXTRA_CAPACITY | \-\-max-pods-extra-capacity | Extra pod capacity allocatable on nodes due to host networked pods that do not consume ENIs. The default is for aws-cni and kube-proxy pods, which are not included in the calculations for max-pods or kube-reserved. (default = 2)|
 | MEMORY_LIMIT | \-\-memory-limit | Memory limit on the container running the controller. The GC soft memory limit is set to 90% of this value. (default = -1)|
 | METRICS_PORT | \-\-metrics-port | The port the metric endpoint binds to for operating metrics about the controller itself (default = 8080)|
 | MIN_VALUES_POLICY | \-\-min-values-policy | Min values policy for scheduling. Options include 'Strict' for existing behavior where min values are strictly enforced or 'BestEffort' where Karpenter relaxes min values when it isn't satisfied. (default = Strict)|
