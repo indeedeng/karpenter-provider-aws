@@ -106,7 +106,7 @@ var _ = Describe("updateUnavailableOfferingsCache (reserved launch failures)", f
 	})
 
 	It("returns an insufficient capacity error for a launch rejected by a reclaiming interruptible reservation", func() {
-		err := combineFleetErrors([]ec2types.CreateFleetError{reservedError("InvalidCapacityReservationState.Unavailable")})
+		err := combineFleetErrors([]ec2types.CreateFleetError{reservedError("InvalidCapacityReservationState.Unavailable")}, nil)
 		Expect(cloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
 	})
 })
